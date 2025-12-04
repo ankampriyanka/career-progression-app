@@ -1,5 +1,6 @@
 title: Team Career Progression Assistant
 emoji: 🧭
+----
 colorFrom: indigo
 colorTo: green
 sdk: streamlit
