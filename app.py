@@ -9,6 +9,52 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ===== UI THEME OPTIONS =====
+st.sidebar.header("🎨 UI Theme Settings")
+
+theme_choice = st.sidebar.selectbox(
+    "Choose a Theme",
+    ["Corporate Blue", "Consulting Grey", "Tech Gradient", "Healthcare Green", "FinTech Neon", "Education Warm", "PeopleOps Pastel"]
+)
+
+industry_choice = st.sidebar.selectbox(
+    "Select Industry",
+    ["Technology", "Consulting", "Banking / FinTech", "Healthcare", "Retail / E-commerce", "Manufacturing", "Education", "Public Sector/Government"]
+)
+
+# ===== THEME COLORS =====
+theme_colors = {
+    "Corporate Blue": {"bg": "#f0f4ff", "primary": "#1a73e8", "accent": "#0b3d91"},
+    "Consulting Grey": {"bg": "#f7f7f7", "primary": "#4a4a4a", "accent": "#808080"},
+    "Tech Gradient": {"bg": "linear-gradient(135deg, #667eea, #764ba2)", "primary": "#6a11cb", "accent": "#2575fc"},
+    "Healthcare Green": {"bg": "#e8fff1", "primary": "#2e8b57", "accent": "#66bb6a"},
+    "FinTech Neon": {"bg": "#f0fdf4", "primary": "#00d4ff", "accent": "#06b6d4"},
+    "Education Warm": {"bg": "#fff7ed", "primary": "#fb923c", "accent": "#ea580c"},
+    "PeopleOps Pastel": {"bg": "#fdf2f8", "primary": "#ec4899", "accent": "#db2777"},
+}
+
+selected_theme = theme_colors[theme_choice]
+
+# ===== APPLY THEME CSS =====
+st.markdown(f"""
+<style>
+body {{
+    background: {selected_theme['bg']} !important;
+}}
+[data-testid="stHeader"] {{
+    background-color: transparent;
+}}
+h1, h2, h3, h4 {{
+    color: {selected_theme['primary']} !important;
+}}
+.block-container {{
+    padding-top: 2rem;
+}}
+</style>
+""", unsafe_allow_html=True)
+
+
+
 # --------- Helper functions ---------
 def compute_readiness_score(row):
     # Normalise years of experience to 1–5 (cap at 10 years)
@@ -125,6 +171,64 @@ def suggest_next_role_and_actions(row):
             "Develop documentation and knowledge base improvements."
         ])
 
+# ===== INDUSTRY-SPECIFIC RECOMMENDATIONS =====
+if industry_choice == "Technology":
+    actions.extend([
+        "Strengthen cloud-native, microservices, DevOps, or machine learning skills.",
+        "Contribute to design reviews and participate in architecture discussions.",
+        "Get exposure to CI/CD, Docker, Kubernetes, or MLOps pipelines."
+    ])
+
+elif industry_choice == "Consulting":
+    actions.extend([
+        "Develop client-facing communication and storytelling skills.",
+        "Take ownership of problem statements and create structured analyses.",
+        "Participate in proposal drafting, business case prep, or strategy reviews."
+    ])
+
+elif industry_choice == "Banking / FinTech":
+    actions.extend([
+        "Learn regulatory frameworks (AML, KYC, PCI-DSS).",
+        "Gain strong domain knowledge in payments, lending, compliance.",
+        "Take certifications like FinTech Foundations, SAFe POPM, or domain-specific BA courses."
+    ])
+
+elif industry_choice == "Healthcare":
+    actions.extend([
+        "Learn EHR systems, HL7/FHIR standards, and HIPAA compliance.",
+        "Build analytics skills for healthcare datasets.",
+        "Understand care workflows and clinical requirements."
+    ])
+
+elif industry_choice == "Retail / E-commerce":
+    actions.extend([
+        "Improve skills in product discovery, customer analytics, and experimentation.",
+        "Learn A/B testing frameworks and customer journey mapping.",
+        "Understand inventory, supply chain, and promotions systems."
+    ])
+
+elif industry_choice == "Manufacturing":
+    actions.extend([
+        "Learn basics of supply chain and production workflows.",
+        "Explore IoT, automation, and predictive maintenance concepts.",
+        "Participate in process improvement initiatives (Lean, Six Sigma)."
+    ])
+
+elif industry_choice == "Education":
+    actions.extend([
+        "Learn instructional design and curriculum development basics.",
+        "Understand LMS platforms and content delivery models.",
+        "Develop facilitation and training program creation skills."
+    ])
+
+elif industry_choice == "Public Sector/Government":
+    actions.extend([
+        "Understand procurement, compliance, and government structures.",
+        "Develop documentation & stakeholder management excellence.",
+        "Learn about digitization initiatives and public service standards."
+    ])
+
+    
     # ------------------------
     # Agile / SAFe Career Recommendations  (NEW)
     # ------------------------
@@ -251,6 +355,12 @@ st.dataframe(
 # --------- Dashboard visuals ---------
 st.markdown("---")
 st.header("📊 Team Dashboard")
+
+chart_color = selected_theme['primary']
+
+fig_scores.update_traces(marker_color=chart_color)
+fig_roles.update_traces(marker_colors=[selected_theme['primary'], selected_theme['accent'], "#aaa"])
+
 
 col1, col2 = st.columns(2)
 
