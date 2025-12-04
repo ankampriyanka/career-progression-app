@@ -1,71 +1,123 @@
-import streamlit as st
-import pandas as pd
-import plotly.express as px
+import os
 from io import StringIO
 
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+from transformers import pipeline
+
+# ------------------ Streamlit Page Config ------------------ #
 st.set_page_config(
-    page_title="Team Career Progression Assistant for a Program Manager",
+    page_title="Team Career Progression Assistant",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# ===== UI THEME OPTIONS =====
-st.sidebar.header("🎨 UI Theme Settings")
+# ------------------ THEME SETUP ------------------ #
 
-theme_choice = st.sidebar.selectbox(
-    "Choose a Theme",
-    ["Corporate Blue", "Consulting Grey", "Tech Gradient", "Healthcare Green", "FinTech Neon", "Education Warm", "PeopleOps Pastel"]
-)
-
-industry_choice = st.sidebar.selectbox(
-    "Select Industry",
-    ["Technology", "Consulting", "Banking / FinTech", "Healthcare", "Retail / E-commerce", "Manufacturing", "Education", "Public Sector/Government"]
-)
-
-# ===== THEME COLORS =====
-theme_colors = {
+THEME_COLORS = {
     "Corporate Blue": {"bg": "#f0f4ff", "primary": "#1a73e8", "accent": "#0b3d91"},
     "Consulting Grey": {"bg": "#f7f7f7", "primary": "#4a4a4a", "accent": "#808080"},
-    "Tech Gradient": {"bg": "linear-gradient(135deg, #667eea, #764ba2)", "primary": "#6a11cb", "accent": "#2575fc"},
+    "Tech Gradient": {"bg": "#f5f3ff", "primary": "#6a11cb", "accent": "#2575fc"},
     "Healthcare Green": {"bg": "#e8fff1", "primary": "#2e8b57", "accent": "#66bb6a"},
-    "FinTech Neon": {"bg": "#f0fdf4", "primary": "#00d4ff", "accent": "#06b6d4"},
+    "FinTech Neon": {"bg": "#f0fdf4", "primary": "#00bcd4", "accent": "#0284c7"},
     "Education Warm": {"bg": "#fff7ed", "primary": "#fb923c", "accent": "#ea580c"},
     "PeopleOps Pastel": {"bg": "#fdf2f8", "primary": "#ec4899", "accent": "#db2777"},
 }
 
-selected_theme = theme_colors[theme_choice]
 
-# ===== APPLY THEME CSS =====
-st.markdown(f"""
-<style>
-body {{
-    background: {selected_theme['bg']} !important;
-}}
-[data-testid="stHeader"] {{
-    background-color: transparent;
-}}
-h1, h2, h3, h4 {{
-    color: {selected_theme['primary']} !important;
-}}
-.block-container {{
-    padding-top: 2rem;
-}}
-</style>
-""", unsafe_allow_html=True)
+def apply_theme(theme_choice: str):
+    colors = THEME_COLORS[theme_choice]
+    st.markdown(
+        f"""
+    <style>
+    body {{
+        background: {colors["bg"]} !important;
+    }}
+    [data-testid="stHeader"] {{
+        background-color: transparent;
+    }}
+    h1, h2, h3 {{
+        color: {colors["primary"]} !important;
+    }}
+    .block-container {{
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+    }}
+    </style>
+    """,
+        unsafe_allow_html=True,
+    )
+    return colors
 
 
+# ------------------ LLM LOADING ------------------ #
 
-# --------- Helper functions ---------
-def compute_readiness_score(row):
-    # Normalise years of experience to 1–5 (cap at 10 years)
+
+@st.cache_resource
+def load_llm():
+    """
+    Load a small, instruction-tuned model.
+    FLAN-T5-small is light enough for CPU Spaces.
+    """
+    try:
+        generator = pipeline(
+            "text2text-generation",
+            model="google/flan-t5-small",
+        )
+        return generator
+    except Exception as e:
+        st.warning(
+            "⚠️ Could not load LLM (FLAN-T5). "
+            "Falling back to rule-based recommendations only.\n\n"
+            f"Details: {e}"
+        )
+        return None
+
+
+@st.cache_data
+def generate_llm_plan_cached(profile_text: str, industry: str):
+    """
+    Cached wrapper so we don’t call the LLM repeatedly
+    for the same profile.
+    """
+    llm = load_llm()
+    if llm is None:
+        return "LLM not available in this environment. Using rule-based recommendations only."
+
+    prompt = (
+        "You are a career coach helping a manager plan growth for their team member.\n\n"
+        "Given the profile below and the industry, write:\n"
+        "1) A short narrative summary of the person's current strengths and gaps.\n"
+        "2) A concrete 30-60-90 day development plan.\n"
+        "Use concise bullet points. Avoid generic advice.\n\n"
+        f"Industry: {industry}\n"
+        f"Profile:\n{profile_text}\n\n"
+        "Answer:"
+    )
+
+    try:
+        out = llm(prompt, max_new_tokens=220, do_sample=False)
+        return out[0]["generated_text"].strip()
+    except Exception as e:
+        return f"LLM generation failed: {e}"
+
+
+# ------------------ SCORING & RULE-BASED LOGIC ------------------ #
+
+
+def compute_readiness_score(row: pd.Series) -> float:
     years_norm = min(row.get("YearsExperience", 0), 10) / 10 * 5
-
     tech = row.get("TechSkillRating", 0)
     soft = row.get("SoftSkillRating", 0)
     perf = row.get("PerformanceRating", 0)
-    leadership = 5 if str(row.get("LeadershipInterest", "")).strip().lower() in ["yes", "y"] else 2
+    leadership = (
+        5
+        if str(row.get("LeadershipInterest", "")).strip().lower() in ["yes", "y"]
+        else 2
+    )
 
-    # Weighted score (0–5)
     score_5 = (
         0.3 * years_norm
         + 0.2 * tech
@@ -73,18 +125,18 @@ def compute_readiness_score(row):
         + 0.2 * perf
         + 0.1 * leadership
     )
-    return round(score_5 / 5 * 100, 1)  # convert to 0–100
+    return round(score_5 / 5 * 100, 1)
 
 
-def suggest_next_role_and_actions(row):
+def suggest_next_role_and_actions(row: pd.Series, industry_choice: str):
     score = row["ReadinessScore"]
     domain = str(row.get("DomainInterest", "")).lower()
     goal = str(row.get("CareerGoal", "")).lower()
-    leadership = str(row.get("LeadershipInterest", "")).strip().lower() in ["yes", "y"]
+    leadership = (
+        str(row.get("LeadershipInterest", "")).strip().lower() in ["yes", "y"]
+    )
 
-    # ------------------------
-    # Next Role Suggestion
-    # ------------------------
+    # ----- Next Role -----
     if score >= 80:
         if leadership:
             next_role = "Team Lead / Scrum Master / SAFe Team Coach"
@@ -95,248 +147,326 @@ def suggest_next_role_and_actions(row):
     else:
         next_role = "Upskill & Consolidate Current Role"
 
-    # ------------------------
-    # Base Action Recommendations
-    # ------------------------
     actions = []
 
+    # ----- Generic banded actions -----
     if score >= 80:
-        actions.append("Take stretch assignments and mentor junior team members.")
-        actions.append("Lead an initiative end-to-end in the next quarter.")
-        actions.append("Demonstrate decision-making in cross-functional areas.")
+        actions.extend(
+            [
+                "Take stretch assignments and mentor junior team members.",
+                "Lead at least one initiative end-to-end this quarter.",
+                "Show decision-making in cross-team topics.",
+            ]
+        )
     elif 60 <= score < 80:
-        actions.append("Strengthen 1–2 core competencies to reach 4+/5.")
-        actions.append("Request ownership of modules or feature areas.")
+        actions.extend(
+            [
+                "Strengthen 1–2 core competencies to reach 4+/5.",
+                "Request ownership of a module or feature area.",
+            ]
+        )
     else:
-        actions.append("Focus on consistency and delivery excellence.")
-        actions.append("Engage with a mentor for monthly feedback cycles.")
+        actions.extend(
+            [
+                "Focus on delivery consistency and quality.",
+                "Pair with a mentor and set up regular feedback sessions.",
+            ]
+        )
 
-    # ------------------------
-    # Domain-Specific Recommendations (Expanded)
-    # ------------------------
-
-    # --- Data & Analytics ---
+    # ----- Domain-specific -----
     if "data" in domain or "analytics" in domain:
-        actions.extend([
-            "Pursue certifications in SQL, Power BI, or Tableau.",
-            "Contribute to small ETL / dashboard projects.",
-            "Strengthen storytelling using data."
-        ])
+        actions.extend(
+            [
+                "Pursue SQL, Power BI, or Tableau certifications.",
+                "Deliver at least one analytics dashboard or report.",
+                "Practice data storytelling for business stakeholders.",
+            ]
+        )
 
-    # --- Cloud & DevOps ---
-    if "cloud" in domain or "aws" in domain or "azure" in domain or "gcp" in domain:
-        actions.extend([
-            "Target AWS/Azure/GCP associate-level certifications.",
-            "Learn CI/CD and infrastructure fundamentals.",
-            "Contribute to cloud migration or automation tasks."
-        ])
+    if "cloud" in domain or any(k in domain for k in ["aws", "azure", "gcp"]):
+        actions.extend(
+            [
+                "Target an associate-level cloud certification.",
+                "Learn CI/CD and infrastructure fundamentals.",
+                "Contribute to cloud migration or automation tasks.",
+            ]
+        )
 
-    # --- AI / Machine Learning ---
     if "ai" in domain or "ml" in domain or "machine learning" in domain:
-        actions.extend([
-            "Build 1–2 end-to-end ML mini projects.",
-            "Complete an applied ML or MLOps certification.",
-            "Learn prompt engineering and build a small chatbot or automation."
-        ])
+        actions.extend(
+            [
+                "Complete an applied ML course and build 1–2 small projects.",
+                "Experiment with LLMs to automate team workflows.",
+                "Understand basic MLOps concepts.",
+            ]
+        )
 
-    # --- Product / Business Analysis ---
     if "product" in domain or "ba" in domain or "business analysis" in domain:
-        actions.extend([
-            "Practice writing clear user stories and acceptance criteria.",
-            "Shadow product discovery sessions or customer calls.",
-            "Develop prioritization skills (WSJF, RICE, MoSCoW)."
-        ])
+        actions.extend(
+            [
+                "Practice writing crisp user stories and acceptance criteria.",
+                "Shadow product discovery or customer calls.",
+                "Apply prioritisation frameworks like WSJF or RICE.",
+            ]
+        )
 
-    # --- Testing / QA / Automation ---
     if "qa" in domain or "test" in domain:
-        actions.extend([
-            "Learn test automation frameworks (Selenium, Cypress, Playwright).",
-            "Contribute to building regression suites.",
-            "Develop skills in API testing (Postman, Karate)."
-        ])
+        actions.extend(
+            [
+                "Learn an automation framework (Selenium, Cypress, Playwright).",
+                "Own regression suites and test strategy for a module.",
+                "Strengthen API testing skills.",
+            ]
+        )
 
-    # --- Architecture / System Design ---
     if "architecture" in domain or "design" in domain:
-        actions.extend([
-            "Study system design patterns and distributed systems basics.",
-            "Lead design conversations in 1–2 upcoming features.",
-            "Strengthen understanding of non-functional requirements."
-        ])
+        actions.extend(
+            [
+                "Study system design patterns and trade-offs.",
+                "Lead technical design for at least one feature.",
+                "Deepen understanding of non-functional requirements.",
+            ]
+        )
 
-    # --- Support / Customer Success ---
     if "support" in domain or "customer" in domain:
-        actions.extend([
-            "Improve product knowledge and case troubleshooting.",
-            "Participate in customer feedback analysis.",
-            "Develop documentation and knowledge base improvements."
-        ])
+        actions.extend(
+            [
+                "Deepen product & troubleshooting knowledge.",
+                "Contribute to knowledge base and runbooks.",
+                "Participate in customer feedback analysis.",
+            ]
+        )
 
-# ===== INDUSTRY-SPECIFIC RECOMMENDATIONS =====
-if industry_choice == "Technology":
-    actions.extend([
-        "Strengthen cloud-native, microservices, DevOps, or machine learning skills.",
-        "Contribute to design reviews and participate in architecture discussions.",
-        "Get exposure to CI/CD, Docker, Kubernetes, or MLOps pipelines."
-    ])
-
-elif industry_choice == "Consulting":
-    actions.extend([
-        "Develop client-facing communication and storytelling skills.",
-        "Take ownership of problem statements and create structured analyses.",
-        "Participate in proposal drafting, business case prep, or strategy reviews."
-    ])
-
-elif industry_choice == "Banking / FinTech":
-    actions.extend([
-        "Learn regulatory frameworks (AML, KYC, PCI-DSS).",
-        "Gain strong domain knowledge in payments, lending, compliance.",
-        "Take certifications like FinTech Foundations, SAFe POPM, or domain-specific BA courses."
-    ])
-
-elif industry_choice == "Healthcare":
-    actions.extend([
-        "Learn EHR systems, HL7/FHIR standards, and HIPAA compliance.",
-        "Build analytics skills for healthcare datasets.",
-        "Understand care workflows and clinical requirements."
-    ])
-
-elif industry_choice == "Retail / E-commerce":
-    actions.extend([
-        "Improve skills in product discovery, customer analytics, and experimentation.",
-        "Learn A/B testing frameworks and customer journey mapping.",
-        "Understand inventory, supply chain, and promotions systems."
-    ])
-
-elif industry_choice == "Manufacturing":
-    actions.extend([
-        "Learn basics of supply chain and production workflows.",
-        "Explore IoT, automation, and predictive maintenance concepts.",
-        "Participate in process improvement initiatives (Lean, Six Sigma)."
-    ])
-
-elif industry_choice == "Education":
-    actions.extend([
-        "Learn instructional design and curriculum development basics.",
-        "Understand LMS platforms and content delivery models.",
-        "Develop facilitation and training program creation skills."
-    ])
-
-elif industry_choice == "Public Sector/Government":
-    actions.extend([
-        "Understand procurement, compliance, and government structures.",
-        "Develop documentation & stakeholder management excellence.",
-        "Learn about digitization initiatives and public service standards."
-    ])
-
-    
-    # ------------------------
-    # Agile / SAFe Career Recommendations  (NEW)
-    # ------------------------
+    # ----- Agile / SAFe ----- #
     if leadership:
-        actions.extend([
-            "Lead daily standups or retrospectives under supervision.",
-            "Take ownership of dependencies and risk updates in team events.",
-        ])
+        actions.extend(
+            [
+                "Facilitate standups or retrospectives under guidance.",
+                "Take responsibility for risk and dependency updates.",
+            ]
+        )
 
-    # --- SAFe-specific ---
-    if any(keyword in domain for keyword in ["agile", "scrum", "safe", "lean", "kanban"]):
-        actions.extend([
-            "Participate actively in PI planning preparation.",
-            "Learn SAFe fundamentals (Lean Portfolio, ARTs, Value Streams).",
-            "Improve backlog refinement and estimation facilitation skills.",
-            "Develop stakeholder communication and coordination abilities.",
-            "Consider SAFe Scrum Master (SSM) / SAFe POPM certification."
-        ])
+    if any(k in domain for k in ["agile", "scrum", "safe", "kanban", "lean"]):
+        actions.extend(
+            [
+                "Participate actively in PI planning preparation.",
+                "Improve backlog refinement and estimation facilitation.",
+                "Track team health metrics (velocity, WIP, predictability).",
+                "Consider SAFe Scrum Master or POPM certification.",
+            ]
+        )
 
-    # ------------------------
-    # Career Goal Specific Guidance
-    # ------------------------
+    # ----- Goal-specific -----
     if "manager" in goal or "lead" in goal:
-        actions.extend([
-            "Enhance stakeholder communication and conflict management.",
-            "Practice leadership in ceremonies (standups, retros, planning).",
-            "Drive at least one improvement initiative this quarter."
-        ])
+        actions.extend(
+            [
+                "Invest in stakeholder communication and conflict management.",
+                "Lead at least one improvement initiative for the team.",
+            ]
+        )
 
     if "architect" in goal:
-        actions.extend([
-            "Lead technical deep dives and evaluate solution alternatives.",
-            "Strengthen cloud architecture and design concepts."
-        ])
+        actions.extend(
+            [
+                "Own design for complex features or components.",
+                "Mentor others on design principles.",
+            ]
+        )
 
     if "scrum" in goal or "agile" in goal:
-        actions.extend([
-            "Run at least two retrospectives end-to-end under guidance.",
-            "Take responsibility for team health metrics (velocity, WIP, predictability)."
-        ])
+        actions.extend(
+            [
+                "Run retrospectives end-to-end with clear outcomes.",
+                "Drive actions from retros back into the backlog.",
+            ]
+        )
 
-    # Final cleanup
-    return next_role, list(dict.fromkeys(actions))  # remove duplicates, preserve order
+    # ----- Industry-specific -----
+    if industry_choice == "Technology":
+        actions.extend(
+            [
+                "Stay current with engineering best practices and new tools.",
+                "Increase exposure to system design and scalability topics.",
+            ]
+        )
+    elif industry_choice == "Consulting":
+        actions.extend(
+            [
+                "Shape problem statements and hypotheses for clients.",
+                "Practice slide-making and structured storylines.",
+            ]
+        )
+    elif industry_choice == "Banking / FinTech":
+        actions.extend(
+            [
+                "Understand key regulatory concepts (AML, KYC, PCI-DSS).",
+                "Strengthen domain skills in payments, lending, or risk.",
+            ]
+        )
+    elif industry_choice == "Healthcare":
+        actions.extend(
+            [
+                "Learn key healthcare processes and data privacy needs.",
+                "Understand EHR/EMR workflows and quality of care metrics.",
+            ]
+        )
+    elif industry_choice == "Retail / E-commerce":
+        actions.extend(
+            [
+                "Use customer analytics to inform feature ideas.",
+                "Understand funnel metrics, A/B testing, and experimentation.",
+            ]
+        )
+    elif industry_choice == "Manufacturing":
+        actions.extend(
+            [
+                "Learn basics of supply chain and production workflows.",
+                "Identify automation opportunities in existing processes.",
+            ]
+        )
+    elif industry_choice == "Education":
+        actions.extend(
+            [
+                "Apply learning design principles to any internal training.",
+                "Help create or improve onboarding materials.",
+            ]
+        )
+    elif industry_choice == "Public Sector/Government":
+        actions.extend(
+            [
+                "Understand procurement and governance processes.",
+                "Document decisions clearly for audit and traceability.",
+            ]
+        )
 
-def build_recommendations(df):
+    actions = list(dict.fromkeys(actions))  # dedupe, preserve order
+    return next_role, actions
+
+
+def build_recommendations(df: pd.DataFrame, industry_choice: str) -> pd.DataFrame:
     df = df.copy()
     df["ReadinessScore"] = df.apply(compute_readiness_score, axis=1)
+
     next_roles = []
-    recs = []
+    rule_actions = []
+    llm_plans = []
 
     for _, row in df.iterrows():
-        role, actions = suggest_next_role_and_actions(row)
-        next_roles.append(role)
-        recs.append("• " + "\n• ".join(actions))
+        next_role, actions = suggest_next_role_and_actions(row, industry_choice)
+        next_roles.append(next_role)
+        rule_actions.append("• " + "\n• ".join(actions))
+
+        profile_text = (
+            f"Name: {row.get('Name')}\n"
+            f"Current role: {row.get('CurrentRole')}\n"
+            f"Years of experience: {row.get('YearsExperience')}\n"
+            f"Tech skill rating (1-5): {row.get('TechSkillRating')}\n"
+            f"Soft skill rating (1-5): {row.get('SoftSkillRating')}\n"
+            f"Performance rating (1-5): {row.get('PerformanceRating')}\n"
+            f"Leadership interest: {row.get('LeadershipInterest')}\n"
+            f"Domain interest: {row.get('DomainInterest')}\n"
+            f"Career goal: {row.get('CareerGoal')}\n"
+            f"Readiness score (0-100): {row.get('ReadinessScore')}\n"
+            f"Suggested next role (rule-based): {next_role}"
+        )
+
+        llm_text = generate_llm_plan_cached(profile_text, industry_choice)
+        llm_plans.append(llm_text)
 
     df["SuggestedNextRole"] = next_roles
-    df["RecommendedActions"] = recs
+    df["RecommendedActions"] = rule_actions
+    df["LLMPlan"] = llm_plans
     return df
 
 
-# --------- UI ---------
-st.title("🧭 Team Career Progression Assistant")
-st.markdown(
-    """
-This app helps a **Program Manager / People Lead** analyse team career readiness  
-and generate **next-role recommendations & action plans** for each member.
-"""
-)
+# ------------------ SIDEBAR CONTROLS ------------------ #
 
 with st.sidebar:
-    st.header("1️⃣ Input Options")
-    st.write("Upload a CSV or start from the sample dataset.")
+    st.header("🎨 UI & Context Settings")
+
+    theme_choice = st.selectbox(
+        "Choose a Theme",
+        list(THEME_COLORS.keys()),
+        index=0,
+    )
+    colors = apply_theme(theme_choice)
+
+    industry_choice = st.selectbox(
+        "Select Industry",
+        [
+            "Technology",
+            "Consulting",
+            "Banking / FinTech",
+            "Healthcare",
+            "Retail / E-commerce",
+            "Manufacturing",
+            "Education",
+            "Public Sector/Government",
+        ],
+        index=0,
+    )
+
+    st.markdown("---")
+    st.header("📥 Input Options")
 
     uploaded_file = st.file_uploader("Upload team data (CSV)", type=["csv"])
 
     st.markdown(
         """
-**Expected columns** (case-sensitive):
+**Expected columns (case-sensitive):**
 
 - `Name`
 - `CurrentRole`
-- `YearsExperience` (number)
+- `YearsExperience`
 - `TechSkillRating` (1–5)
 - `SoftSkillRating` (1–5)
 - `PerformanceRating` (1–5)
 - `LeadershipInterest` (Yes/No)
-- `DomainInterest` (text)
-- `CareerGoal` (text)
+- `DomainInterest`
+- `CareerGoal`
 """
     )
 
-    use_sample = st.checkbox("Use sample data", value=True if not uploaded_file else False)
+    use_sample = st.checkbox(
+        "Use sample data",
+        value=uploaded_file is None,
+        help="Tick this if you want to see a pre-filled example.",
+    )
 
-# Load data
+# ------------------ DATA LOADING ------------------ #
+
 if uploaded_file is not None:
     df_raw = pd.read_csv(uploaded_file)
 elif use_sample:
-    df_raw = pd.read_csv("sample_data/team_members_sample.csv")
+    sample_path = os.path.join("sample_data", "team_members_sample.csv")
+    if os.path.exists(sample_path):
+        df_raw = pd.read_csv(sample_path)
+    else:
+        st.error(
+            f"Sample file not found at `{sample_path}`. "
+            "Please upload a CSV or add the sample_data folder."
+        )
+        st.stop()
 else:
-    st.info("Upload a CSV or tick 'Use sample data' to begin.")
+    st.info("Upload a CSV or tick 'Use sample data' in the sidebar to begin.")
     st.stop()
 
-st.subheader("👥 Input Data")
+# ------------------ MAIN LAYOUT ------------------ #
+
+st.title("🧭 Team Career Progression Assistant")
+st.caption(
+    "This app helps a **Program Manager / People Lead** analyse team career readiness "
+    "and generate next-role recommendations & 30–60–90 day plans."
+)
+
+# Input data view
+st.subheader("📥 Input Data")
 st.dataframe(df_raw, use_container_width=True)
 
-# Compute recommendations
-df = build_recommendations(df_raw)
+# Build recommendations (rule-based + LLM)
+df = build_recommendations(df_raw, industry_choice)
 
+# Recommendations table
 st.subheader("📋 Recommendations by Team Member")
 st.dataframe(
     df[
@@ -346,21 +476,28 @@ st.dataframe(
             "YearsExperience",
             "ReadinessScore",
             "SuggestedNextRole",
-            "RecommendedActions",
         ]
     ],
     use_container_width=True,
 )
 
-# --------- Dashboard visuals ---------
+# Detailed per-member view with LLM output
+st.markdown("---")
+st.subheader("🧠 Detailed View & LLM 30–60–90 Day Plan")
+
+for _, row in df.iterrows():
+    with st.expander(f"{row['Name']} — {row['SuggestedNextRole']}"):
+        col_a, col_b = st.columns([1, 1])
+        with col_a:
+            st.markdown("**Rule-based recommended actions:**")
+            st.markdown(row["RecommendedActions"])
+        with col_b:
+            st.markdown("**LLM-generated narrative & 30–60–90 day plan:**")
+            st.markdown(row["LLMPlan"])
+
+# Dashboard visuals
 st.markdown("---")
 st.header("📊 Team Dashboard")
-
-chart_color = selected_theme['primary']
-
-fig_scores.update_traces(marker_color=chart_color)
-fig_roles.update_traces(marker_colors=[selected_theme['primary'], selected_theme['accent'], "#aaa"])
-
 
 col1, col2 = st.columns(2)
 
@@ -375,7 +512,11 @@ with col1:
         text="ReadinessScore",
     )
     fig_scores.update_traces(textposition="outside")
-    fig_scores.update_layout(yaxis_range=[0, 110])
+    fig_scores.update_layout(
+        yaxis_range=[0, 110],
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
     st.plotly_chart(fig_scores, use_container_width=True)
 
 with col2:
@@ -388,21 +529,26 @@ with col2:
         values="Count",
         hole=0.4,
     )
+    fig_roles.update_layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
     st.plotly_chart(fig_roles, use_container_width=True)
 
+# Download
 st.markdown("---")
-st.header("📝 Download Results")
+st.header("📥 Download Results")
 
 csv_buffer = StringIO()
 df.to_csv(csv_buffer, index=False)
 st.download_button(
-    label="Download recommendations as CSV",
+    label="Download recommendations (with LLM plan) as CSV",
     data=csv_buffer.getvalue(),
-    file_name="career_recommendations.csv",
+    file_name="career_recommendations_with_llm.csv",
     mime="text/csv",
 )
 
 st.caption(
-    "Note: This tool provides **guidance**, not strict HR decisions. "
-    "Use along with your judgment as a people leader."
+    "Note: This tool provides *decision support* for people leaders. "
+    "Always combine insights with your own judgment and HR guidelines."
 )
