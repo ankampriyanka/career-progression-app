@@ -7,7 +7,7 @@ app_file: app.py
 pinned: false
 ---
 
-# 🧭 Team Career Progression Assistant
+# 🧭 Team Career Progression Assistant.
 
 This app helps **Program Managers, People Leads, and Scrum Masters**:
 
