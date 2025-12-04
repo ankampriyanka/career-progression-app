@@ -1,9 +1,8 @@
 title: Team Career Progression Assistant
 emoji: 🧭
-----
 colorFrom: indigo
 colorTo: green
-sdk: streamlit
+sdk: Docker
 app_file: app.py
 pinned: false
 ----
