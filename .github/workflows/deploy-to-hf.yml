@@ -24,4 +24,4 @@ jobs:
         uses: huggingface/hub-actions@v1
         with:
           repo-token: ${{ secrets.TEAMCAREERPROGRESSIONAPPTOKEN }}
-          repo-id: Priyanka-Ankam/Team-Career-Progression-App   # <-- change to your Space ID
+          repo-id: Priyanka-Ankam/Team-Career-Progression-App   # <-- change to your Space ID 
