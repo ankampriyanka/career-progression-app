@@ -1,11 +1,14 @@
 ---
-title: Team Career Progression Assistant
+title: Team Career Progression App
 emoji: 🧭
 colorFrom: indigo
 colorTo: green
-sdk: Docker
+sdk: docker
+sdk_version: "0.0.1"
+app_file: app.py
 pinned: false
 ---
+
 
 # 🧭 Team Career Progression Assistant
 
