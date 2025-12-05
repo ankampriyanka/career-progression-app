@@ -19,7 +19,7 @@ jobs:
 
       - name: Clone Hugging Face Space
         run: |
-          git clone https://__token__:${{ secrets.TEAMCAREERPROGRESSIONAPPTOKEN }}@huggingface.co/${{ secrets.HF_SPACE }} hf_repo
+          git clone https://__token__:${{ secrets.TEAMCAREERPROGRESSIONAPPTOKEN }}@huggingface.co/${{ secrets.HF_SPACE }} hf_space
 
       - name: Copy project files into HF Space
         run: |
@@ -27,7 +27,7 @@ jobs:
 
       - name: Commit & push to Hugging Face
         run: |
-          cd hf_repo
+          cd hf_space
           git add .
           git commit -m "Auto deploy from GitHub" || echo "No changes to commit"
           git push
