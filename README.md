@@ -38,4 +38,4 @@ Built with **Streamlit + Python**, deployed on **Hugging Face Spaces**, and vers
 
 ```bash
 pip install -r requirements.txt
-run app.py
+run src/streamlit_app.py
