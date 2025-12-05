@@ -1,8 +1,14 @@
 ---
-title: Team Progression App
+title: Team Career Progression Assistant
 emoji: 🧭
 colorFrom: indigo
 colorTo: green
-sdk: docker
+sdk: streamlit
+app_file: app.py
 pinned: false
 ---
+
+# 🧭 Team Career Progression Assistant
+
+Upload team data → Get Readiness Score → See next roles → Get dashboards.
+AI 30-60-90 plans are optional.
