@@ -1,4 +1,4 @@
-name: Deploy to Hugging Face Space
+name: Deploy Docker App to Hugging Face Space
 
 on:
   push:
@@ -15,16 +15,12 @@ jobs:
       - name: Install HF CLI
         run: pip install huggingface_hub
 
-      - name: Upload to Hugging Face Space
+      - name: Upload to Hugging Face
         env:
-          HF_TOKEN: ${{ secrets.TeamCareerProgressionAppTOKEN }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           hf upload \
             Priyanka-Ankam/Team-Progression-App \
             . \
             --token $HF_TOKEN \
-            --commit-message "Auto deploy"
-
-
-
-
+            --commit-message "Deploy updated Dockerfile"
