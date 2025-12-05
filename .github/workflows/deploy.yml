@@ -1,0 +1,26 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout GitHub repo
+        uses: actions/checkout@v4
+
+      - name: Install Hugging Face CLI
+        run: pip install huggingface_hub
+
+      - name: Upload all project files to HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.TEAMCAREERPROGRESSIONAPPTOKEN }}
+        run: |
+          hf upload \
+            Priyanka-Ankam/Team-Progression-App \
+            . \
+            --token $HF_TOKEN \
+            --commit-message "Auto-sync from GitHub"
