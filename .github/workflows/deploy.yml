@@ -20,7 +20,7 @@ jobs:
           HF_TOKEN: ${{ secrets.TEAMCAREERPROGRESSIONAPPTOKEN }}
         run: |
           hf upload \
-            spaces/Priyanka-Ankam/Team-Progression-App \
+            Priyanka-Ankam/Team-Progression-App \
             . \
             --token $HF_TOKEN \
             --commit-message "GitHub → HF Auto Deploy"
