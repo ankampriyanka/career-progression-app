@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout GitHub repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Configure Git
@@ -21,11 +21,11 @@ jobs:
         run: |
           git clone https://__token__:${{ secrets.TeamCareerProgressionAppTOKEN }}@huggingface.co/${{ secrets.HF_SPACE }} hf_repo
 
-      - name: Copy project files safely
+      - name: Copy project files into HF Space
         run: |
           rsync -av --exclude='hf_repo' --exclude='.git' --exclude='.github' ./ hf_repo/
 
-      - name: Commit and push to Hugging Face
+      - name: Commit & push to Hugging Face
         run: |
           cd hf_repo
           git add .
