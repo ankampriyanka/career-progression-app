@@ -10,4 +10,4 @@ pinned: false
 
 # Team Progression App
 
-Streamlit app deployed via GitHub → HuggingFace.
+Streamlit app deployed via GitHub → HuggingFace
