@@ -9,13 +9,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout GitHub repo
+      - name: Checkout GitHub repository
         uses: actions/checkout@v4
 
       - name: Install Hugging Face CLI
         run: pip install huggingface_hub
 
-      - name: Upload all project files to HuggingFace
+      - name: Upload project to HuggingFace Space
         env:
           HF_TOKEN: ${{ secrets.TEAMCAREERPROGRESSIONAPPTOKEN }}
         run: |
@@ -23,4 +23,4 @@ jobs:
             Priyanka-Ankam/Team-Progression-App \
             . \
             --token $HF_TOKEN \
-            --commit-message "Auto-sync from GitHub"
+            --commit-message "GitHub → HF Auto Deploy"
