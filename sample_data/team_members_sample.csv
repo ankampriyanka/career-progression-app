@@ -1,7 +1,7 @@
 Name,CurrentRole,YearsExperience,TechSkillRating,SoftSkillRating,PerformanceRating,LeadershipInterest,DomainInterest,CareerGoal
-Anita,Software Engineer,4,4,4,4,Yes,Cloud & Microservices,Engineering Manager
-Ravi,QA Engineer,3,3,4,3,No,Test Automation,Senior QA Engineer
-Meera,Business Analyst,6,3,5,5,Yes,Data & Analytics,Product Manager
-Karan,Data Engineer,2,3,3,3,Yes,AI & ML,Data Scientist
-Sara,Support Engineer,5,2,4,3,No,Customer Experience,Senior Support Engineer
-Vikram,Developer,8,5,4,5,Yes,Architecture & Design,Tech Lead
+Anita,Software Engineer,4,4,4,3,Yes,Cloud,Engineering Manager
+Ravi,QA Engineer,6,3,3,4,Yes,Test Automation,Senior QA
+Meera,Business Analyst,3,3,4,4,No,Data & Analytics,Product Manager
+Karan,Data Engineer,5,5,3,5,Yes,AI & ML,Data Scientist
+Sara,Support Engineer,2,2,4,3,No,Customer Ops,Senior Support Engineer
+Vikram,Developer,8,5,5,4,Yes,Architecture,Tech Lead
