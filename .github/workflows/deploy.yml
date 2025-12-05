@@ -23,7 +23,11 @@ jobs:
 
       - name: Sync project files to Space (overwrite)
         run: |
-          rsync -av --exclude='hf_repo' --exclude='.git' --exclude='.github' ./ hf_repo/
+          rsync -av --delete \
+            --exclude="hf_repo" \
+            --exclude=".git" \
+            --exclude=".github" \
+            ./ hf_repo/
 
       - name: Commit & Push
         run: |
